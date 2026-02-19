@@ -70,42 +70,8 @@ jobs:
           name: linux-build
           path: release-latest-linux.tar.gz
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '5.15.2'
-          host: 'mac'
-          target: 'desktop'
-          
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake .. -DCMAKE_PREFIX_PATH=${{ env.Qt5_DIR }} -DCMAKE_BUILD_TYPE=Release
-          make -j$(sysctl -n hw.ncpu)
-          
-      - name: Package
-        run: |
-          mkdir release-mac
-          cp -r build/GDIconInstaller.app release-mac/
-          cd release-mac
-          macdeployqt GDIconInstaller.app
-          cd ..
-          tar -czf release-latest-mac.tar.gz -C release-mac .
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: release-latest-mac.tar.gz
-
   release:
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,10 +86,6 @@ jobs:
         with:
           name: linux-build
           
-      - name: Download macOS build
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-build
           
       - name: Get current date/time
         id: datetime
@@ -139,6 +101,5 @@ jobs:
           files: |
             release-latest-win.zip
             release-latest-linux.tar.gz
-            release-latest-mac.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
