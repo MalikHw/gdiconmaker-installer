@@ -22,9 +22,8 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QProgressDialog>
-#include <QuaZip>
-#include <quazipfile.h>
-#include <JlCompress.h>
+#include <QScrollBar>
+#include <QDateTime>
 
 class IconInstallerWindow : public QMainWindow {
     Q_OBJECT
@@ -60,25 +59,35 @@ private:
     }
 
     bool validateZip(const QString &path) {
-        QuaZip zip(path);
-        if (!zip.open(QuaZip::mdUnzip)) {
-            log("❌ Failed to open ZIP file");
+        // Use PowerShell to check ZIP contents
+        QString tempDir = QDir::tempPath() + "/gdiconmaker_validate_" + QString::number(QDateTime::currentMSecsSinceEpoch());
+        
+        QProcess proc;
+#ifdef Q_OS_WIN
+        QString psCmd = QString("powershell -Command \"Expand-Archive -Path '%1' -DestinationPath '%2' -Force\"")
+            .arg(path).arg(tempDir);
+        proc.start("cmd.exe", QStringList() << "/c" << psCmd);
+#else
+        proc.start("unzip", QStringList() << "-q" << path << "-d" << tempDir);
+#endif
+        
+        if (!proc.waitForFinished(10000)) {
+            log("❌ ZIP extraction timeout");
+            QDir(tempDir).removeRecursively();
+            return false;
+        }
+        
+        if (proc.exitCode() != 0) {
+            log("❌ Failed to extract ZIP for validation");
+            QDir(tempDir).removeRecursively();
             return false;
         }
 
-        QStringList files = zip.getFileNameList();
-        zip.close();
+        bool hasPack = QFile::exists(tempDir + "/pack.json");
+        bool hasPng = QFile::exists(tempDir + "/pack.png");
+        bool hasIcons = QDir(tempDir + "/icons").exists();
 
-        bool hasPack = files.contains("pack.json");
-        bool hasPng = files.contains("pack.png");
-        bool hasIcons = false;
-
-        for (const QString &f : files) {
-            if (f.startsWith("icons/")) {
-                hasIcons = true;
-                break;
-            }
-        }
+        QDir(tempDir).removeRecursively();
 
         if (!hasPack || !hasPng || !hasIcons) {
             log("❌ Invalid pack structure (missing pack.json/pack.png/icons)");
@@ -194,15 +203,32 @@ private:
         QString resourcesPath = gdPath + "/resources";
         QString iconsPath = resourcesPath + "/icons";
 
-        // Extract ZIP to temp
-        QString tempDir = QDir::tempPath() + "/gdiconmaker_temp";
+        // Extract ZIP to temp using PowerShell
+        QString tempDir = QDir::tempPath() + "/gdiconmaker_temp_" + QString::number(QDateTime::currentMSecsSinceEpoch());
         QDir().mkpath(tempDir);
 
         log("Extracting pack...");
-        QStringList extracted = JlCompress::extractDir(zipPath, tempDir);
-        if (extracted.isEmpty()) {
+        
+        QProcess proc;
+#ifdef Q_OS_WIN
+        QString psCmd = QString("powershell -Command \"Expand-Archive -Path '%1' -DestinationPath '%2' -Force\"")
+            .arg(zipPath).arg(tempDir);
+        proc.start("cmd.exe", QStringList() << "/c" << psCmd);
+#else
+        proc.start("unzip", QStringList() << "-q" << zipPath << "-d" << tempDir);
+#endif
+
+        if (!proc.waitForFinished(30000)) {
+            log("❌ Extraction timeout");
+            QMessageBox::critical(this, "Error", "ZIP extraction timed out");
+            QDir(tempDir).removeRecursively();
+            return;
+        }
+
+        if (proc.exitCode() != 0) {
             log("❌ Failed to extract ZIP");
             QMessageBox::critical(this, "Error", "Failed to extract ZIP file");
+            QDir(tempDir).removeRecursively();
             return;
         }
 
@@ -214,6 +240,7 @@ private:
         if (iconFiles.isEmpty()) {
             log("❌ No icon files found in pack");
             QMessageBox::critical(this, "Error", "No icon files found in pack");
+            QDir(tempDir).removeRecursively();
             return;
         }
 

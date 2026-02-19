@@ -10,9 +10,6 @@ set(CMAKE_AUTOUIC ON)
 # Find Qt
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
 
-# Find QuaZip
-find_package(QuaZip-Qt5 REQUIRED)
-
 # Source files
 set(SOURCES
     main.cpp
@@ -38,7 +35,6 @@ endif()
 target_link_libraries(${PROJECT_NAME}
     Qt5::Core
     Qt5::Widgets
-    QuaZip::QuaZip
 )
 
 # Install
