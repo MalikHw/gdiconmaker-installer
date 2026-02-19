@@ -45,7 +45,7 @@ jobs:
           Compress-Archive -Path release-win\* -DestinationPath release-latest-win.zip
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: release-latest-win.zip
@@ -85,7 +85,7 @@ jobs:
           tar -czf ../release-latest-linux.tar.gz *
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-build
           path: release-latest-linux.tar.gz
@@ -129,7 +129,7 @@ jobs:
           tar -czf release-latest-mac.tar.gz -C release-mac .
           
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: release-latest-mac.tar.gz
@@ -141,17 +141,17 @@ jobs:
       contents: write
     steps:
       - name: Download Windows build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: windows-build
           
       - name: Download Linux build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: linux-build
           
       - name: Download macOS build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: macos-build
           
