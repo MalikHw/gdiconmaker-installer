@@ -1,0 +1,174 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '5.15.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          
+      - name: Install QuaZip
+        run: |
+          git clone https://github.com/stachenov/quazip.git
+          cd quazip
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_PREFIX_PATH=${{ env.Qt5_DIR }} -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
+          cmake --install . --prefix ${{ env.Qt5_DIR }}
+          
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_PREFIX_PATH=${{ env.Qt5_DIR }} -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
+          
+      - name: Package
+        run: |
+          mkdir release-win
+          cp build/Release/GDIconInstaller.exe release-win/
+          cd release-win
+          windeployqt GDIconInstaller.exe
+          cd ..
+          Compress-Archive -Path release-win\* -DestinationPath release-latest-win.zip
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-build
+          path: release-latest-win.zip
+
+  build-linux:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt5-default libqt5widgets5 cmake build-essential zlib1g-dev
+          
+      - name: Install QuaZip
+        run: |
+          git clone https://github.com/stachenov/quazip.git
+          cd quazip
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          sudo cmake --build . --config Release
+          sudo cmake --install .
+          
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+          
+      - name: Package
+        run: |
+          mkdir release-linux
+          cp build/GDIconInstaller release-linux/
+          cd release-linux
+          tar -czf ../release-latest-linux.tar.gz *
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-build
+          path: release-latest-linux.tar.gz
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '5.15.2'
+          host: 'mac'
+          target: 'desktop'
+          
+      - name: Install QuaZip
+        run: |
+          git clone https://github.com/stachenov/quazip.git
+          cd quazip
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_PREFIX_PATH=${{ env.Qt5_DIR }} -DCMAKE_BUILD_TYPE=Release
+          make -j$(sysctl -n hw.ncpu)
+          sudo make install
+          
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_PREFIX_PATH=${{ env.Qt5_DIR }} -DCMAKE_BUILD_TYPE=Release
+          make -j$(sysctl -n hw.ncpu)
+          
+      - name: Package
+        run: |
+          mkdir release-mac
+          cp -r build/GDIconInstaller.app release-mac/
+          cd release-mac
+          macdeployqt GDIconInstaller.app
+          cd ..
+          tar -czf release-latest-mac.tar.gz -C release-mac .
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-build
+          path: release-latest-mac.tar.gz
+
+  release:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-build
+          
+      - name: Download Linux build
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-build
+          
+      - name: Download macOS build
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-build
+          
+      - name: Get current date/time
+        id: datetime
+        run: echo "datetime=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.datetime.outputs.datetime }}
+          name: Auto Release
+          draft: false
+          prerelease: false
+          files: |
+            release-latest-win.zip
+            release-latest-linux.tar.gz
+            release-latest-mac.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
